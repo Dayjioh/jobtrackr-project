@@ -17,14 +17,12 @@ const PORT = process.env.PORT;
 app.use("/api/auth", authRoutes);
 
 pool.query("SELECT NOW()", (err, res) => {
-  if (err) {
-    console.error("Database connection error", err);
-  } else {
-    console.log("Database connected:", res.rows[0]);
-  }
+  // console.log(res);
+  const date = new Date(res.rows[0].now).toLocaleString("fr-FR"); // "21/02/2026, 02:01:14"
+
+  console.log(`Database connected : ${date} ✅`);
 });
 
-
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT} 👌`);
 });
