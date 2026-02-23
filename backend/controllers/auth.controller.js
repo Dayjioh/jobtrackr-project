@@ -2,9 +2,6 @@ import pool from "../lib/db.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 
-import dotenv from "dotenv";
-dotenv.config();
-
 const signup = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -130,11 +127,76 @@ const logout = async (req, res) => {
 };
 
 const getProfile = async (req, res) => {
+  
   try {
     res.json({ userId: req.userId });
   } catch (error) {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+const getAllProfiles = async (req, res) => {
+  try {
+    /*
+     * pool.query() envoie une requête SQL à PostgreSQL
+     * rows contient le tableau de résultats
+     */
+    const { rows } = await pool.query("SELECT id, email FROM users");
 
-export { signup, login, logout, getProfile };
+    if (rows.length === 0) {
+      return res.status(404).json({ message: "No users found" });
+    }
+
+    res.status(200).json({
+      message: "Users fetched successfully",
+      count: rows.length,
+      users: rows,
+    });
+  } catch (error) {
+    console.error("❌ getAllProfiles error :", error.message);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+/*
+ * getProfileById - Récupère un utilisateur par son id
+ * Méthode : GET /api/auth/profiles/:id
+ * req.params.id contient l'id passé dans l'URL
+ */
+const getProfileById = async (req, res) => {
+  try {
+    /*
+     * On récupère l'id depuis les paramètres de l'URL
+     * ex: /api/auth/profiles/1 → req.params.id = "1"
+     */
+    const { id } = req.params;
+
+    /*
+     * $1 est un paramètre sécurisé qui évite les injections SQL
+     * il sera remplacé par la valeur de id
+     * NE JAMAIS faire : `SELECT * FROM users WHERE id = ${id}` ← dangereux
+     */
+    const { rows } = await pool.query(
+      "SELECT id, email FROM users WHERE id = $1",
+      [id]
+    );
+
+    /*
+     * rows[0] car on attend un seul utilisateur
+     * si rows est vide, l'utilisateur n'existe pas
+     */
+    if (!rows[0]) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json({
+      message: "User fetched successfully",
+      id: rows[0].id,
+      email: rows[0].email
+    });
+  } catch (error) {
+    console.error("❌ getProfileById error :", error.message);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export { signup, login, logout, getProfile, getAllProfiles,getProfileById };

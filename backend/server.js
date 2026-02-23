@@ -1,9 +1,10 @@
-import express from "express";
+import express, { application } from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import pool from "./lib/db.js";
 
 import authRoutes from "./routes/auth.route.js";
+import applicationRoutes from "./routes/applications.route.js";
 
 dotenv.config();
 
@@ -15,6 +16,7 @@ app.use(express.json());
 const PORT = process.env.PORT;
 
 app.use("/api/auth", authRoutes);
+app.use("/api/applications", applicationRoutes);
 
 pool.query("SELECT NOW()", (err, res) => {
   // console.log(res);
