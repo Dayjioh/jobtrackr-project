@@ -1,6 +1,16 @@
 import pool from "../lib/db.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import {
+  generateAccessToken,
+  generateRefreshToken,
+} from "../utils/generateTokens.js";
+import {
+  deleteRefreshToken,
+  getRefreshToken,
+  storeRefreshToken,
+} from "../utils/storeRefreshToken.js";
+import { setAccessTokenCookie, setRefreshTokenCookie } from "../utils/setCookies.js";
 
 const signup = async (req, res) => {
   try {
@@ -89,7 +99,6 @@ const login = async (req, res) => {
       return res.status(400).json({ message: "Missing fields" });
     }
 
-    // Chercher user
     const user = await pool.query("SELECT * FROM users WHERE email = $1", [
       email,
     ]);
@@ -104,32 +113,86 @@ const login = async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    const token = jwt.sign(
-      { userId: user.rows[0].id },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: "1h",
-      },
-    );
+    const userData = user.rows[0];
 
-    res.json({
+    // 1. Générer les tokens
+    const accessToken = generateAccessToken(userData.id);
+    const refreshToken = generateRefreshToken(userData.id);
+
+    // 2. Stocker le refreshToken dans Redis
+    await storeRefreshToken(userData.id, refreshToken);
+
+    // 3. Stocker les deux tokens dans des cookies httpOnly
+    setAccessTokenCookie(res, accessToken);
+    setRefreshTokenCookie(res, refreshToken);
+
+    // 4. Renvoyer uniquement le user à Zustand
+    // l'accessToken n'est plus renvoyé en JSON → il est dans le cookie
+    res.status(200).json({
       message: "Login successful",
-      token,
+      user: { id: userData.id, email: userData.email },
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error" });
+    console.error("❌ login error :", error.message);
+    res
+      .status(500)
+      .json({ message: "Internal server error", error: error.message });
+  }
+};
+
+/*
+ * Refresh - Génère un nouvel accessToken depuis le refreshToken
+ */
+const refresh = async (req, res) => {
+  try {
+    const refreshToken = req.cookies.refreshToken;
+
+    if (!refreshToken) {
+      return res.status(401).json({ message: "No refresh token" });
+    }
+
+    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+
+    // Vérifier que le refreshToken existe bien dans Redis
+    const storedToken = await getRefreshToken(decoded.userId);
+    if (storedToken !== refreshToken) {
+      return res.status(401).json({ message: "Invalid refresh token" });
+    }
+
+    // Générer un nouvel accessToken et le stocker dans un cookie
+    const accessToken = generateAccessToken(decoded.userId);
+    setAccessTokenCookie(res, accessToken);
+
+    res.status(200).json({ message: "Token refreshed successfully" });
+  } catch (error) {
+    console.error("❌ refresh error :", error.message);
+    res.status(401).json({ message: "Invalid refresh token" });
   }
 };
 
 const logout = async (req, res) => {
-  res.send("logout");
+  try {
+    const refreshToken = req.cookies.refreshToken;
+
+    if (refreshToken) {
+      const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+      await deleteRefreshToken(decoded.userId);
+    }
+
+    // Supprimer les deux cookies
+    res.clearCookie("accessToken");
+    res.clearCookie("refreshToken");
+
+    res.status(200).json({ message: "Logged out successfully" });
+  } catch (error) {
+    console.error("❌ logout error :", error.message);
+    res.status(500).json({ message: "Internal server error" });
+  }
 };
 
 const getProfile = async (req, res) => {
-  
   try {
-    res.json({ userId: req.userId });
+    res.status(200).json({ user: req.user });
   } catch (error) {
     res.status(500).json({ message: "Server error", error: error.message });
   }
@@ -177,7 +240,7 @@ const getProfileById = async (req, res) => {
      */
     const { rows } = await pool.query(
       "SELECT id, email FROM users WHERE id = $1",
-      [id]
+      [id],
     );
 
     /*
@@ -191,7 +254,7 @@ const getProfileById = async (req, res) => {
     res.status(200).json({
       message: "User fetched successfully",
       id: rows[0].id,
-      email: rows[0].email
+      email: rows[0].email,
     });
   } catch (error) {
     console.error("❌ getProfileById error :", error.message);
@@ -199,4 +262,12 @@ const getProfileById = async (req, res) => {
   }
 };
 
-export { signup, login, logout, getProfile, getAllProfiles,getProfileById };
+export {
+  signup,
+  login,
+  logout,
+  getProfile,
+  getAllProfiles,
+  getProfileById,
+  refresh,
+};

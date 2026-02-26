@@ -1,12 +1,23 @@
 import { useEffect, useState } from "react";
-import API from "../services/api";
+import API from "../lib/axios";
 import Navbar from "../components/Navbar";
+import useAuthStore from "../stores/useAuthStore";
+import { useNavigate } from "react-router-dom";
 
 function Dashboard() {
   const [applications, setApplications] = useState([]);
   const [company, setCompany] = useState("");
   const [position, setPosition] = useState("");
   const [status, setStatus] = useState("applied");
+
+  /*
+   * editingApp → stocke la candidature en cours d'édition
+   * null = pas d'édition en cours
+   */
+  const [editingApp, setEditingApp] = useState(null);
+
+  const { user, logout } = useAuthStore();
+  const navigate = useNavigate();
 
   const fetchApplications = async () => {
     const res = await API.get("/applications");
@@ -22,6 +33,31 @@ function Dashboard() {
     await API.post("/applications", { company, position, status });
     setCompany("");
     setPosition("");
+    setStatus("applied");
+    fetchApplications();
+  };
+
+  /*
+   * Pré-remplit le formulaire avec les données de la candidature à éditer
+   * et stocke la candidature dans editingApp
+   */
+  const startEditing = (app) => {
+    setEditingApp(app);
+    setCompany(app.company);
+    setPosition(app.position);
+    setStatus(app.status);
+  };
+
+  /*
+   * Envoie la mise à jour au backend avec l'id de editingApp
+   */
+  const updateApplication = async (e) => {
+    e.preventDefault();
+    await API.put(`/applications/${editingApp.id}`, { company, position, status });
+    setEditingApp(null);
+    setCompany("");
+    setPosition("");
+    setStatus("applied");
     fetchApplications();
   };
 
@@ -30,14 +66,38 @@ function Dashboard() {
     fetchApplications();
   };
 
+  const handleLogout = async () => {
+    await logout();
+    navigate("/");
+  };
+
   return (
     <div className="min-h-screen bg-slate-100">
       <Navbar />
 
       <div className="max-w-4xl mx-auto mt-10 p-6 bg-white rounded-2xl shadow-lg">
-        <h2>My Applications</h2>
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold">My Applications</h2>
+         <div className="flex items-center gap-4">
+            <p className="text-gray-500">Bonjour {user?.email}</p>
+            <button
+              onClick={handleLogout}
+              className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
 
-        <form onSubmit={createApplication} className="flex gap-4 mb-6">
+        {/*
+         * Le formulaire sert à la fois pour créer et mettre à jour
+         * si editingApp est défini → mode édition
+         * sinon → mode création
+         */}
+        <form
+          onSubmit={editingApp ? updateApplication : createApplication}
+          className="flex gap-4 mb-6"
+        >
           <input
             className="border p-2 rounded-lg w-full"
             placeholder="Company"
@@ -62,9 +122,27 @@ function Dashboard() {
             <option value="rejected">Rejected</option>
           </select>
 
-          <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">
-            Add
+          <button className={`${editingApp ? "bg-yellow-500 hover:bg-yellow-600" : "bg-blue-600 hover:bg-blue-700"} text-white px-4 py-2 rounded-lg transition`}>
+            {editingApp ? "Update" : "Add"}
           </button>
+
+          {/*
+           * Annuler l'édition → remet le formulaire à zéro
+           */}
+          {editingApp && (
+            <button
+              type="button"
+              onClick={() => {
+                setEditingApp(null);
+                setCompany("");
+                setPosition("");
+                setStatus("applied");
+              }}
+              className="bg-gray-400 text-white px-4 py-2 rounded-lg hover:bg-gray-500 transition"
+            >
+              Cancel
+            </button>
+          )}
         </form>
 
         {applications.map((app) => (
@@ -87,13 +165,20 @@ function Dashboard() {
                 {app.status}
               </span>
             </div>
-
-            <button
-              onClick={() => deleteApplication(app.id)}
-              className="bg-red-500 text-white px-3 py-1 rounded-lg hover:bg-red-600 transition"
-            >
-              Delete
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => startEditing(app)}
+                className="bg-yellow-500 text-white px-3 py-1 rounded-lg hover:bg-yellow-600 transition"
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => deleteApplication(app.id)}
+                className="bg-red-500 text-white px-3 py-1 rounded-lg hover:bg-red-600 transition"
+              >
+                Delete
+              </button>
+            </div>
           </div>
         ))}
       </div>

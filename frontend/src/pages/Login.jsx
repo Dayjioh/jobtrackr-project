@@ -1,23 +1,28 @@
 import { useState } from "react";
-import API from "../services/api";
 import { useNavigate } from "react-router-dom";
+import useAuthStore from "../stores/useAuthStore";
 
 function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const navigate = useNavigate();
+  const { login } = useAuthStore();
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
 
     try {
-      const res = await API.post("/auth/login", { email, password });
-      localStorage.setItem("token", res.data.token);
+      /*
+       * On appelle login depuis Zustand
+       * plus de localStorage → le token est dans le cookie httpOnly
+       * Zustand stocke uniquement le user
+       */
+      await login(email, password);
       navigate("/dashboard");
     } catch (err) {
-      setError("Invalid email or password");
+      setError(err.response?.data?.message || "Invalid email or password");
     }
   };
 
