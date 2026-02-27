@@ -1,4 +1,5 @@
 import axios from "axios";
+import useAuthStore from "../stores/useAuthStore";
 
 const API = axios.create({
   baseURL: "http://localhost:5000/api",
@@ -6,14 +7,20 @@ const API = axios.create({
 });
 
 // Add a response interceptor
-axios.interceptors.response.use(function onFulfilled(response) {
-    // Any status code that lie within the range of 2xx cause this function to trigger
-    // Do something with response data
-    return response;
-  }, function onRejected(error) {
-    // Any status codes that falls outside the range of 2xx cause this function to trigger
-    // Do something with response error
+API.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response?.status === 401) {
+      try {
+        await API.post("/auth/refresh");
+        return API(error.config);
+      } catch {
+        useAuthStore.getState().logout();
+        window.location.href = "/";
+      }
+    }
     return Promise.reject(error);
-  });
+  },
+);
 
 export default API;
