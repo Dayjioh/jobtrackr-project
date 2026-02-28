@@ -145,25 +145,63 @@ const login = async (req, res) => {
  */
 const refresh = async (req, res) => {
   try {
+    /*
+     * ÉTAPE 1 — Récupérer le refreshToken depuis le cookie
+     */
     const refreshToken = req.cookies.refreshToken;
+    console.log("🔄 Refresh token reçu :", refreshToken);
 
     if (!refreshToken) {
       return res.status(401).json({ message: "No refresh token" });
     }
 
+    /*
+     * ÉTAPE 2 — Vérifier la signature JWT du refreshToken
+     * si le token est falsifié ou expiré → jwt.verify lance une erreur
+     */
     const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+    console.log("✅ Token décodé :", decoded);
 
-    // Vérifier que le refreshToken existe bien dans Redis
+    /*
+     * ÉTAPE 3 — Vérifier que le refreshToken existe bien dans Redis
+     * si l'utilisateur s'est déconnecté → Redis ne l'a plus → 401
+     * si le token a déjà été utilisé (rotation) → Redis ne l'a plus → 401
+     */
     const storedToken = await getRefreshToken(decoded.userId);
+    console.log("📦 Token stocké dans Redis :", storedToken);
+
     if (storedToken !== refreshToken) {
       return res.status(401).json({ message: "Invalid refresh token" });
     }
 
-    // Générer un nouvel accessToken et le stocker dans un cookie
-    const accessToken = generateAccessToken(decoded.userId);
-    setAccessTokenCookie(res, accessToken);
+    /*
+     * ÉTAPE 4 — ROTATION
+     * on génère un nouveau accessToken ET un nouveau refreshToken
+     * l'ancien refreshToken sera remplacé dans Redis et dans le cookie
+     */
+    const newAccessToken = generateAccessToken(decoded.userId);
+    const newRefreshToken = generateRefreshToken(decoded.userId);
+    console.log("🔑 Nouveaux tokens générés");
+
+    /*
+     * ÉTAPE 5 — Mettre à jour Redis
+     * on supprime l'ancien refreshToken
+     * on stocke le nouveau refreshToken
+     */
+    await deleteRefreshToken(decoded.userId);
+    await storeRefreshToken(decoded.userId, newRefreshToken);
+    console.log("📦 Redis mis à jour");
+
+    /*
+     * ÉTAPE 6 — Mettre à jour les cookies
+     * on remplace les anciens cookies par les nouveaux
+     */
+    setAccessTokenCookie(res, newAccessToken);
+    setRefreshTokenCookie(res, newRefreshToken);
+    console.log("🍪 Cookies mis à jour");
 
     res.status(200).json({ message: "Token refreshed successfully" });
+
   } catch (error) {
     console.error("❌ refresh error :", error.message);
     res.status(401).json({ message: "Invalid refresh token" });
