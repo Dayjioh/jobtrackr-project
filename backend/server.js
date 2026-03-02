@@ -26,7 +26,6 @@ app.use("/api/auth", authRoutes);
 app.use("/api/applications", applicationRoutes);
 
 pool.query("SELECT NOW()", (err, res) => {
-  // console.log(res);
   const date = new Date(res.rows[0].now).toLocaleString("fr-FR"); // "21/02/2026, 02:01:14"
 
   console.log(`Database connected : ${date} ✅`);

@@ -127,7 +127,7 @@ function Dashboard() {
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold">My Applications</h2>
           <div className="flex items-center gap-4">
-            <p className="text-gray-500">Bonjour {user?.email}</p>
+            <p className="text-gray-500">Welcome {user?.email}</p>
             <button
               onClick={handleLogout}
               className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition"
