@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import useAuthStore from "../stores/useAuthStore";
+import toast from "react-hot-toast";
 
 function Login() {
   const [email, setEmail] = useState("");
@@ -20,19 +21,20 @@ function Login() {
        * Zustand stocke uniquement le user
        */
       await login(email, password);
+      toast.success("Login successful ✅");
       navigate("/dashboard");
     } catch (err) {
-      setError(err.response?.data?.message || "Invalid email or password");
+      toast.error(err.response?.data?.message || "Invalid email or password");
     }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-700">
       <div className="bg-white p-10 rounded-2xl shadow-2xl w-full max-w-md">
-        <h1 className="text-3xl font-bold text-center mb-6 text-slate-800">
-          JobTrackr
-        </h1>
-
+        <div className="flex items-center justify-center gap-3 mb-6">
+          <img className="w-8 h-8" src="./job_logo.svg" alt="JobTrackr logo" />
+          <h1 className="text-3xl font-bold text-slate-800">JobTrackr</h1>
+        </div>
         <p className="text-center text-gray-500 mb-6">
           Login to manage your applications
         </p>
@@ -69,6 +71,15 @@ function Login() {
             Login
           </button>
         </form>
+        <p className="text-center text-gray-500 mt-4 text-sm">
+          Don't have an account ?{" "}
+          <Link
+            to="/signup"
+            className="text-blue-600 hover:underline font-medium"
+          >
+            Sign Up
+          </Link>
+        </p>
       </div>
     </div>
   );

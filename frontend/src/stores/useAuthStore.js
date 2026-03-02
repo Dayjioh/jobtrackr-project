@@ -19,17 +19,31 @@ const useAuthStore = create((set) => ({
    */
   login: async (email, password) => {
     set({ isLoading: true });
-    const { data } = await API.post("/auth/login", { email, password });
-    set({ user: data.user, isAuthenticated: true, isLoading: false });
+    try {
+      const { data } = await API.post("/auth/login", { email, password });
+      set({ user: data.user, isAuthenticated: true, isLoading: false });
+    } catch (error) {
+      set({ isLoading: false });
+      throw error;
+    }
   },
 
   /*
    * Signup → appel API + stocke le user dans Zustand
    */
-  signup: async (name, email, password) => {
+  signup: async (email, password) => {
     set({ isLoading: true });
-    const { data } = await API.post("/auth/signup", { name, email, password });
-    set({ user: data.user, isAuthenticated: true, isLoading: false });
+    try {
+      const { data } = await API.post("/auth/signup", { email, password });
+      set({ user: data.user, isAuthenticated: true, isLoading: false });
+    } catch (error) {
+      /*
+       * Sans ce catch, si l'API renvoie une erreur
+       * isLoading reste à true → bouton bloqué sur "Loading..."
+       */
+      set({ isLoading: false });
+      throw error; // on remonte l'erreur pour que le composant puisse l'afficher
+    }
   },
 
   /*

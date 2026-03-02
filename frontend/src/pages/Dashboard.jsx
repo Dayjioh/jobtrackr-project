@@ -3,6 +3,9 @@ import API from "../lib/axios";
 import Navbar from "../components/Navbar";
 import useAuthStore from "../stores/useAuthStore";
 import { useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
+import EditModal from "../components/EditModal";
+import {Trash2,SquarePen,CirclePlus, LogOut} from "lucide-react";
 
 function Dashboard() {
   const [applications, setApplications] = useState([]);
@@ -14,7 +17,19 @@ function Dashboard() {
    * editingApp → stocke la candidature en cours d'édition
    * null = pas d'édition en cours
    */
+  // Remplacez startEditing et updateApplication par :
   const [editingApp, setEditingApp] = useState(null);
+
+  const updateApplication = async (id, updatedData) => {
+    try {
+      await API.put(`/applications/${id}`, updatedData);
+      toast.success("Application updated! ✏️");
+      setEditingApp(null);
+      fetchApplications();
+    } catch {
+      toast.error("Failed to update application");
+    }
+  };
 
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
@@ -30,11 +45,16 @@ function Dashboard() {
 
   const createApplication = async (e) => {
     e.preventDefault();
-    await API.post("/applications", { company, position, status });
-    setCompany("");
-    setPosition("");
-    setStatus("applied");
-    fetchApplications();
+    try {
+      await API.post("/applications", { company, position, status });
+      toast.success("Application added ! 🗒️");
+      setCompany("");
+      setPosition("");
+      setStatus("applied");
+      fetchApplications();
+    } catch {
+      toast.error("Failed to add application");
+    }
   };
 
   /*
@@ -51,24 +71,52 @@ function Dashboard() {
   /*
    * Envoie la mise à jour au backend avec l'id de editingApp
    */
-  const updateApplication = async (e) => {
-    e.preventDefault();
-    await API.put(`/applications/${editingApp.id}`, { company, position, status });
-    setEditingApp(null);
-    setCompany("");
-    setPosition("");
-    setStatus("applied");
-    fetchApplications();
-  };
 
   const deleteApplication = async (id) => {
-    await API.delete(`/applications/${id}`);
-    fetchApplications();
+    try {
+      await API.delete(`/applications/${id}`);
+      toast.success("Application deleted ! 🗑️");
+      fetchApplications();
+    } catch {
+      toast.error("Failed to delete application");
+    }
   };
 
   const handleLogout = async () => {
-    await logout();
-    navigate("/");
+    try {
+      await logout();
+      toast.success("Logged out successfully !");
+      navigate("/");
+    } catch {
+      toast.error("Failed to logout");
+    }
+  };
+
+  /*
+   * activeFilter → le filtre actif
+   * "all" par défaut → affiche toutes les candidatures
+   */
+  const [activeFilter, setActiveFilter] = useState("all");
+
+  /*
+   * filteredApplications → candidatures filtrées selon le filtre actif
+   * si "all" → on affiche tout
+   * sinon → on filtre par status
+   */
+  const filteredApplications =
+    activeFilter === "all"
+      ? applications
+      : applications.filter((app) => app.status === activeFilter);
+
+  /*
+   * On calcule les stats directement depuis le tableau applications
+   * pas besoin de requête supplémentaire au backend
+   */
+  const stats = {
+    total: applications.length,
+    applied: applications.filter((app) => app.status === "applied").length,
+    interview: applications.filter((app) => app.status === "interview").length,
+    rejected: applications.filter((app) => app.status === "rejected").length,
   };
 
   return (
@@ -78,15 +126,57 @@ function Dashboard() {
       <div className="max-w-4xl mx-auto mt-10 p-6 bg-white rounded-2xl shadow-lg">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold">My Applications</h2>
-         <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4">
             <p className="text-gray-500">Bonjour {user?.email}</p>
             <button
               onClick={handleLogout}
               className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition"
             >
-              Logout
+              <LogOut/>
             </button>
           </div>
+        </div>
+
+        {/* Stats visuelles */}
+        <div className="grid grid-cols-4 gap-4 mb-6">
+          <div className="bg-slate-50 p-4 rounded-xl shadow text-center">
+            <p className="text-2xl font-bold text-slate-800">{stats.total}</p>
+            <p className="text-sm text-slate-500 mt-1">Total</p>
+          </div>
+
+          <div className="bg-blue-50 p-4 rounded-xl shadow text-center">
+            <p className="text-2xl font-bold text-blue-600">{stats.applied}</p>
+            <p className="text-sm text-blue-400 mt-1">Applied</p>
+          </div>
+
+          <div className="bg-yellow-50 p-4 rounded-xl shadow text-center">
+            <p className="text-2xl font-bold text-yellow-500">
+              {stats.interview}
+            </p>
+            <p className="text-sm text-yellow-400 mt-1">Interview</p>
+          </div>
+
+          <div className="bg-red-50 p-4 rounded-xl shadow text-center">
+            <p className="text-2xl font-bold text-red-500">{stats.rejected}</p>
+            <p className="text-sm text-red-400 mt-1">Rejected</p>
+          </div>
+        </div>
+
+        {/* Filtres par status */}
+        <div className="flex gap-2 mb-6">
+          {["all", "applied", "interview", "rejected"].map((filter) => (
+            <button
+              key={filter}
+              onClick={() => setActiveFilter(filter)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition ${
+                activeFilter === filter
+                  ? "bg-blue-600 text-white" // ← actif
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200" // ← inactif
+              }`}
+            >
+              {filter}
+            </button>
+          ))}
         </div>
 
         {/*
@@ -94,10 +184,7 @@ function Dashboard() {
          * si editingApp est défini → mode édition
          * sinon → mode création
          */}
-        <form
-          onSubmit={editingApp ? updateApplication : createApplication}
-          className="flex gap-4 mb-6"
-        >
+        <form onSubmit={createApplication} className="flex gap-4 mb-6">
           <input
             className="border p-2 rounded-lg w-full"
             placeholder="Company"
@@ -122,8 +209,8 @@ function Dashboard() {
             <option value="rejected">Rejected</option>
           </select>
 
-          <button className={`${editingApp ? "bg-yellow-500 hover:bg-yellow-600" : "bg-blue-600 hover:bg-blue-700"} text-white px-4 py-2 rounded-lg transition`}>
-            {editingApp ? "Update" : "Add"}
+          <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">
+            <CirclePlus/>
           </button>
 
           {/*
@@ -145,7 +232,7 @@ function Dashboard() {
           )}
         </form>
 
-        {applications.map((app) => (
+        {filteredApplications.map((app) => (
           <div
             key={app.id}
             className="flex justify-between items-center p-4 mb-3 bg-slate-50 rounded-xl shadow"
@@ -170,18 +257,25 @@ function Dashboard() {
                 onClick={() => startEditing(app)}
                 className="bg-yellow-500 text-white px-3 py-1 rounded-lg hover:bg-yellow-600 transition"
               >
-                Edit
+               <SquarePen className="w-4 h-8" />
               </button>
               <button
                 onClick={() => deleteApplication(app.id)}
                 className="bg-red-500 text-white px-3 py-1 rounded-lg hover:bg-red-600 transition"
               >
-                Delete
+                <Trash2 className="w-4 h-8" />
               </button>
             </div>
           </div>
         ))}
       </div>
+      {editingApp && (
+        <EditModal
+          app={editingApp}
+          onClose={() => setEditingApp(null)}
+          onUpdate={updateApplication}
+        />
+      )}
     </div>
   );
 }

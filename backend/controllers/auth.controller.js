@@ -10,31 +10,34 @@ import {
   getRefreshToken,
   storeRefreshToken,
 } from "../utils/storeRefreshToken.js";
-import { setAccessTokenCookie, setRefreshTokenCookie } from "../utils/setCookies.js";
+import {
+  setAccessTokenCookie,
+  setRefreshTokenCookie,
+} from "../utils/setCookies.js";
 
 const signup = async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    // 1. Vérifier champs manquants
     if (!email || !password) {
       return res.status(400).json({ message: "Missing fields" });
     }
 
-    // Vérifier si email existe déjà
-    const existingUser = await pool.query(
-      "SELECT * FROM users WHERE email = $1",
-      [email],
-    );
+    // 2. Valider format email
+    const emailRules = [
+      {
+        rule: (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e),
+        message: "Email must be a valid address (ex: example@example.com)",
+      },
+    ];
 
-    if (existingUser.rows.length > 0) {
-      return res.status(400).json({ message: "Email already exists" });
+    const failedEmailRule = emailRules.find(({ rule }) => !rule(email));
+    if (failedEmailRule) {
+      return res.status(400).json({ message: failedEmailRule.message });
     }
 
-    // Hash password
-    const saltRounds = 10;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
-
-    // Vérifier si le mot de passe respecte les règles
+    // 3. Valider password
     const passwordRules = [
       {
         rule: (p) => p.length >= 8,
@@ -63,24 +66,32 @@ const signup = async (req, res) => {
       return res.status(400).json({ message: failedRule.message });
     }
 
-    // Vérifie si l'email respecte la régle de format
-    const emailRules = [
-      {
-        rule: (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e),
-        message: "Email must be a valid address (ex: example@example.com)",
-      },
-    ];
+    // 4. Vérifier si email existe déjà en base
+    const existingUser = await pool.query(
+      "SELECT * FROM users WHERE email = $1",
+      [email],
+    );
 
-    const failedEmailRule = emailRules.find(({ rule }) => !rule(email));
-    if (failedEmailRule) {
-      return res.status(400).json({ message: failedEmailRule.message });
+    if (existingUser.rows.length > 0) {
+      return res.status(400).json({ message: "Email already exists" });
     }
 
-    // Insert user
+    // 5. Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // 6. Insert user
     const newUser = await pool.query(
       "INSERT INTO users (email, password) VALUES ($1, $2) RETURNING id, email, created_at",
       [email, hashedPassword],
     );
+
+    // Après l'insert user
+    const newAccessToken = generateAccessToken(newUser.rows[0].id);
+    const newRefreshToken = generateRefreshToken(newUser.rows[0].id);
+
+    await storeRefreshToken(newUser.rows[0].id, newRefreshToken);
+    setAccessTokenCookie(res, newAccessToken);
+    setRefreshTokenCookie(res, newRefreshToken);
 
     res.status(201).json({
       message: "User created",
@@ -149,7 +160,7 @@ const refresh = async (req, res) => {
      * ÉTAPE 1 — Récupérer le refreshToken depuis le cookie
      */
     const refreshToken = req.cookies.refreshToken;
-    console.log("🔄 Refresh token reçu :", refreshToken);
+    // console.log("🔄 Refresh token reçu :", refreshToken);
 
     if (!refreshToken) {
       return res.status(401).json({ message: "No refresh token" });
@@ -201,7 +212,6 @@ const refresh = async (req, res) => {
     console.log("🍪 Cookies mis à jour");
 
     res.status(200).json({ message: "Token refreshed successfully" });
-
   } catch (error) {
     console.error("❌ refresh error :", error.message);
     res.status(401).json({ message: "Invalid refresh token" });
