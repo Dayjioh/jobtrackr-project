@@ -13,7 +13,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: "http://localhost:5173", // port Vite par défaut
+    origin: process.env.CLIENT_URL || "http://localhost:5173", // port Vite par défaut
     credentials: true, // obligatoire pour envoyer les cookies
   }),
 );
@@ -26,6 +26,10 @@ app.use("/api/auth", authRoutes);
 app.use("/api/applications", applicationRoutes);
 
 pool.query("SELECT NOW()", (err, res) => {
+  if (err) {
+    console.error("❌ Database connection error :", err.message);
+    return;
+  }
   const date = new Date(res.rows[0].now).toLocaleString("fr-FR"); // "21/02/2026, 02:01:14"
 
   console.log(`Database connected : ${date} ✅`);
